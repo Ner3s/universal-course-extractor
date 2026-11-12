@@ -7,6 +7,8 @@ export const SKILLJAR_DEFAULT_SELECTORS = {
   lesson_title: ".lesson-top > h2",
   lesson_content: "#details-pane-summary-content",
   video: "video.jw-video",
+  /** Opcional: elemento com transcrição textual na página. Sem valor padrão. */
+  transcript: "",
   /** Opcional: seletor presente apenas quando autenticado. Sem valor padrão (não inventamos). */
   logged_in: "",
 } as const;

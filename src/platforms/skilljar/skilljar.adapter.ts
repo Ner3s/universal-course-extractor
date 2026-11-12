@@ -14,6 +14,8 @@ import type {
   LessonContentResult,
   TranscriptResult,
 } from "../../types/index.js";
+import { createDefaultTranscriptExtractor } from "../../extraction/default-chain.js";
+import type { TranscriptExtractor } from "../../extraction/transcript-extractor.js";
 import { SkilljarExtractor } from "./skilljar.extractor.js";
 import { SkilljarNavigator, courseIdFromUrl } from "./skilljar.navigator.js";
 import { resolveSelectors, type SkilljarSelectors } from "./skilljar.selectors.js";
@@ -22,6 +24,7 @@ export interface SkilljarAdapterDeps {
   browserManager: BrowserManager;
   /** Substituível em testes; padrão: aguarda Enter no terminal. */
   waitForUserConfirmation?: () => Promise<void>;
+  transcriptExtractor?: TranscriptExtractor;
 }
 
 async function waitForEnter(): Promise<void> {
@@ -119,8 +122,14 @@ export class SkilljarAdapter implements CoursePlatformAdapter {
     return this.extractor!.getTitle();
   }
 
-  async getTranscript(_lesson: Lesson): Promise<TranscriptResult> {
-    return { status: "unavailable", reason: "Transcript engine not wired yet" };
+  async getTranscript(lesson: Lesson): Promise<TranscriptResult> {
+    await this.extractor!.openLesson(lesson.url);
+    const engine = this.deps.transcriptExtractor ?? createDefaultTranscriptExtractor();
+    return engine.extract({
+      page: this.c.page,
+      logger: this.c.logger,
+      selectors: this.selectors as unknown as Record<string, string>,
+    });
   }
 
   async dispose(): Promise<void> {
