@@ -64,13 +64,15 @@ describe("ProgressRepository", () => {
     });
   });
 
-  it("registra falhas e lista aulas retomáveis (exclui completed e pending)", () => {
+  it("registra falhas e lista aulas retomáveis (pending, em andamento e falhas; exclui completed e partial)", () => {
     for (const n of [1, 2, 3, 4]) progress.upsertLesson(lesson(n));
     progress.setStatus("h/c/l1", "failed", "boom");
     progress.setStatus("h/c/l2", "translating");
     progress.markFinished("h/c/l3", "completed", "/out/03.md");
+    progress.upsertLesson(lesson(5));
+    progress.markFinished("h/c/l5", "partial", "/out/05.md");
     const ids = progress.findResumable("h/c").map((r) => r.id);
-    expect(ids).toEqual(["h/c/l1", "h/c/l2"]);
+    expect(ids).toEqual(["h/c/l1", "h/c/l2", "h/c/l4"]);
     expect(progress.get("h/c/l1")!.error).toBe("boom");
     expect(progress.get("h/c/l3")).toMatchObject({ status: "completed", outputPath: "/out/03.md", error: undefined });
     expect(progress.get("h/c/l3")!.processedAt).toBeDefined();

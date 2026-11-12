@@ -66,7 +66,8 @@ export function detectCompletedStages(r: LessonRecord | undefined): CompletedSta
   };
 }
 
-const TERMINAL: LessonStatus[] = ["completed"];
+/** Estados finais: partial já gerou arquivo (com avisos) e não é refeito no resume. */
+const TERMINAL: LessonStatus[] = ["completed", "partial"];
 
 export class ProgressRepository {
   constructor(private readonly db: Database) {}
@@ -95,10 +96,10 @@ export class ProgressRepository {
     ).map(toRecord);
   }
 
-  /** Aulas não concluídas (pendentes, interrompidas, parciais ou com falha). */
+  /** Aulas selecionadas e ainda não finalizadas: pending, interrompidas ou com falha. */
   findResumable(courseId?: string): LessonRecord[] {
     const placeholders = TERMINAL.map(() => "?").join(",");
-    const sql = `SELECT * FROM lessons WHERE status NOT IN (${placeholders}) AND status != 'pending'
+    const sql = `SELECT * FROM lessons WHERE status NOT IN (${placeholders})
                  ${courseId ? "AND course_id = ?" : ""} ORDER BY course_id, position`;
     const args: string[] = [...TERMINAL, ...(courseId ? [courseId] : [])];
     return (this.db.prepare(sql).all(...args) as unknown as Row[]).map(toRecord);
