@@ -1,0 +1,22 @@
+<div id="details-pane-summary-content">
+  <h2>Introduction to Claude</h2>
+  <p>Claude is an <strong>AI assistant</strong> made by <a href="https://www.anthropic.com/claude">Anthropic</a>. It is <em>helpful</em>, harmless and honest.</p>
+  <script>alert('xss')</script>
+  <ul>
+    <li>Item one</li>
+    <li>Item two with <code>inline_code()</code></li>
+  </ul>
+  <ol start="1"><li>First</li><li>Second</li></ol>
+  <blockquote><p>A quoted remark.</p></blockquote>
+  <hr>
+  <table>
+    <thead><tr><th>Model</th><th>Use</th></tr></thead>
+    <tbody><tr><td>Haiku</td><td>Fast</td></tr><tr><td>Opus</td><td>Deep</td></tr></tbody>
+  </table>
+  <pre><code class="language-python">def hello():
+    print("hi")
+</code></pre>
+  <img src="https://example.com/diagram.png" alt="Architecture diagram">
+  <iframe src="https://evil.example.com"></iframe>
+  <a href="javascript:alert(1)" onclick="x()">bad link</a>
+</div>
