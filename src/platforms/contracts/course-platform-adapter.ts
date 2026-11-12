@@ -26,4 +26,8 @@ export interface CoursePlatformAdapter {
   getLessonContent(lesson: Lesson): Promise<LessonContentResult>;
   getTranscript(lesson: Lesson): Promise<TranscriptResult>;
   dispose(): Promise<void>;
+
+  /** Opcionais: o núcleo usa quando presentes. */
+  setStartUrl?(url: string): void;
+  getLessonTitle?(lesson: Lesson): Promise<string | undefined>;
 }
