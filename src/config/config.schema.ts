@@ -8,6 +8,8 @@ export const aiConfigSchema = z.object({
   maxTokens: z.number().int().positive(),
   timeoutMs: z.number().int().positive(),
   maxRetries: z.number().int().min(0),
+  /** Tamanho máximo (caracteres) de cada chunk enviado ao modelo. */
+  chunkChars: z.number().int().min(500),
 });
 export type AiConfig = z.infer<typeof aiConfigSchema>;
 

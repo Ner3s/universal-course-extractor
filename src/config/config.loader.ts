@@ -26,6 +26,7 @@ export function loadAppConfig(env: Env = process.env): AppConfig {
       maxTokens: num(env.AI_MAX_TOKENS, DEFAULTS.ai.maxTokens),
       timeoutMs: num(env.AI_TIMEOUT, DEFAULTS.ai.timeoutMs),
       maxRetries: num(env.AI_MAX_RETRIES, DEFAULTS.ai.maxRetries),
+      chunkChars: num(env.AI_CHUNK_CHARS, DEFAULTS.ai.chunkChars),
     },
     dataDir: env.DATA_DIR ?? DEFAULTS.dataDir,
     outputDir: env.OUTPUT_DIR ?? DEFAULTS.outputDir,

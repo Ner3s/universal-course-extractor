@@ -7,6 +7,7 @@ export const DEFAULTS = {
     maxTokens: 8192,
     timeoutMs: 120_000,
     maxRetries: 3,
+    chunkChars: 6000,
   },
   dataDir: "data",
   outputDir: "dist",
