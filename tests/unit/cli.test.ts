@@ -99,13 +99,15 @@ describe("createProgram", () => {
     expect((await parse(["--from", "1", "--to", "5"]))[1]).toMatchObject({ from: 1, to: 5 });
     expect((await parse(["--all"]))[1]).toMatchObject({ all: true });
   });
-  it("subcomandos: auth, courses, lessons --course, resume", async () => {
+  it("subcomandos: auth, courses, lessons --course, resume, check-config, test-ai", async () => {
     expect((await parse(["auth"]))[0]).toBe("auth");
     expect((await parse(["courses"]))[0]).toBe("courses");
     const [c, o] = await parse(["lessons", "--course", "Nome do curso"]);
     expect(c).toBe("lessons");
     expect(o).toMatchObject({ course: "Nome do curso" });
     expect((await parse(["resume"]))[0]).toBe("resume");
+    expect((await parse(["check-config"]))[0]).toBe("check-config");
+    expect((await parse(["test-ai"]))[0]).toBe("test-ai");
   });
   it("rejeita número inválido", async () => {
     const p = createProgram(async () => {}).exitOverride().configureOutput({ writeErr: () => {} });

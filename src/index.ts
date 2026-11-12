@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { join } from "node:path";
+import { runAiDiagnostics } from "./ai/ai-tester.js";
 import { createProgram, type CommandName } from "./cli/cli.js";
 import { CliUsageError } from "./cli/errors.js";
 import type { ScrapeOptions } from "./cli/options.js";
@@ -17,18 +18,46 @@ async function run(command: CommandName, options: ScrapeOptions): Promise<void> 
   const config = loadAppConfig();
 
   if (command === "check-config") {
+    const platforms = loadPlatformsConfig();
+    const enabledPlatforms = Object.entries(platforms.platforms)
+      .filter(([, p]) => p.enabled)
+      .map(([name]) => name);
     console.log(
-      `Config OK\n  AI endpoint: ${config.ai.baseUrl}\n  AI model: ${config.ai.model}\n  Data dir: ${config.dataDir}\n  Output dir: ${config.outputDir}`,
+      [
+        "Config OK",
+        `  AI endpoint:    ${config.ai.baseUrl}`,
+        `  AI model:       ${config.ai.model}`,
+        `  AI temperature: ${config.ai.temperature}`,
+        `  AI max tokens:  ${config.ai.maxTokens}`,
+        `  AI chunk chars: ${config.ai.chunkChars}`,
+        `  AI timeout:     ${config.ai.timeoutMs}ms`,
+        `  AI max retries: ${config.ai.maxRetries}`,
+        `  Platforms:      ${enabledPlatforms.join(", ") || "none"}`,
+        `  Data dir:       ${config.dataDir}`,
+        `  Output dir:     ${config.outputDir}`,
+      ].join("\n"),
     );
     return;
   }
 
   const logger = createAppLogger(config.dataDir, config.logLevel);
+  const ai = createAiProvider(config, logger);
+
+  if (command === "test-ai") {
+    const report = await runAiDiagnostics({
+      config: config.ai,
+      provider: ai,
+      logger,
+      out: (l) => console.log(l),
+    });
+    if (!report.ok) process.exitCode = 1;
+    return;
+  }
+
   const platforms = loadPlatformsConfig();
   const db = openDatabase(join(config.dataDir, "database", "progress.sqlite"));
   const courses = new CourseRepository(db);
   const progress = new ProgressRepository(db);
-  const ai = createAiProvider(config, logger);
 
   // Ctrl+C: finaliza a aula atual e salva o progresso; segundo Ctrl+C encerra.
   const abort = new AbortController();

@@ -11,6 +11,7 @@ import {
 } from "../../src/processors/markdown-translator.js";
 import { OpenAiCompatibleClient } from "../../src/ai/ai-client.js";
 import { AiConnectionError, type AiProvider, type CompletionRequest } from "../../src/ai/ai-provider.interface.js";
+import { runAiDiagnostics } from "../../src/ai/ai-tester.js";
 import { loadAppConfig } from "../../src/config/config.loader.js";
 
 const logger = pino({ level: "silent" });
@@ -206,5 +207,53 @@ describe("OpenAiCompatibleClient", () => {
   });
   it("valida a configuração", () => {
     expect(() => new OpenAiCompatibleClient({ ...config, baseUrl: "x" }, logger)).toThrow();
+  });
+});
+
+describe("runAiDiagnostics", () => {
+  const config = loadAppConfig({}).ai;
+
+  it("passa quando conexão, resumo e tradução Markdown funcionam", async () => {
+    const out: string[] = [];
+    const provider = fakeProvider((req) => {
+      if (req.system.includes("tradutor")) {
+        return req.user.replace(/<<<CONTEUDO>>>\n?|\n?<<<FIM>>>/g, "");
+      }
+      return "Visão geral.\n\n### Principais conceitos\n\n- Prompt\n\n### Pontos importantes\n\n- Temperatura";
+    });
+    const report = await runAiDiagnostics({ config, provider, logger, out: (l) => out.push(l) });
+    expect(report.ok).toBe(true);
+    expect(report.steps.map((s) => [s.name, s.ok])).toEqual([
+      ["connection", true],
+      ["summarizer", true],
+      ["translator", true],
+    ]);
+    expect(out.join("\n")).toContain("AI test passed: all 3/3 checks succeeded");
+  });
+
+  it("interrompe imediatamente quando a conexão com o endpoint falha", async () => {
+    const provider: AiProvider = {
+      async complete() {
+        return { text: "OK" };
+      },
+      async checkConnection() {
+        throw new AiConnectionError("Cannot reach AI endpoint http://127.0.0.1:8080/v1");
+      },
+    };
+    const report = await runAiDiagnostics({ config, provider, logger });
+    expect(report.ok).toBe(false);
+    expect(report.steps).toHaveLength(1);
+    expect(report.steps[0]).toMatchObject({ name: "connection", ok: false });
+  });
+
+  it("reporta falha se o modelo corromper placeholders ou estrutura na tradução", async () => {
+    const provider = fakeProvider((req) => {
+      if (req.system.includes("tradutor")) return "Tradução inválida sem estrutura nem código";
+      return "### Principais conceitos\n- Ok";
+    });
+    const report = await runAiDiagnostics({ config: { ...config, maxRetries: 0 }, provider, logger });
+    expect(report.ok).toBe(false);
+    expect(report.steps.find((s) => s.name === "summarizer")?.ok).toBe(true);
+    expect(report.steps.find((s) => s.name === "translator")?.ok).toBe(false);
   });
 });

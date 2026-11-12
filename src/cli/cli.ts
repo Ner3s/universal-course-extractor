@@ -1,7 +1,7 @@
 import { Command, InvalidArgumentError } from "commander";
 import type { ScrapeOptions } from "./options.js";
 
-export type CommandName = "scrape" | "auth" | "courses" | "lessons" | "resume" | "check-config";
+export type CommandName = "scrape" | "auth" | "courses" | "lessons" | "resume" | "check-config" | "test-ai";
 export type CommandRunner = (command: CommandName, options: ScrapeOptions) => Promise<void>;
 
 function int(value: string): number {
@@ -50,8 +50,12 @@ export function createProgram(run: CommandRunner): Command {
   sub("resume", "resume interrupted or failed processing");
   program
     .command("check-config")
-    .description("validate .env configuration and print a summary without secrets")
+    .description("validate .env and platforms configuration and print a summary without secrets")
     .action(async () => run("check-config", {}));
+  program
+    .command("test-ai")
+    .description("test AI endpoint connectivity, model availability, summarization and Markdown translation")
+    .action(async () => run("test-ai", {}));
 
   return program;
 }
