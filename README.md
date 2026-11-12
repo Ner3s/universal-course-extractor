@@ -24,14 +24,25 @@ Primeira plataforma: **Anthropic Partner Academy (Skilljar)**. Há também um `g
 
 ## Instalação
 
+Com `make` (recomendado):
+
+```bash
+make setup
+make check
+```
+
+Ou diretamente com `npm`:
+
 ```bash
 npm install
 npx playwright install chromium
 cp .env.example .env
 cp config/platforms.example.yaml config/platforms.yaml   # opcional; sem ele usa o exemplo
 npm run typecheck && npm test
-npm run scrape -- check-config
+npm run check-config
 ```
+
+Veja todos os atalhos disponíveis no [Makefile](Makefile) com `make help`.
 
 ## Configurar o llama.cpp
 
@@ -57,6 +68,21 @@ AI_CHUNK_CHARS=6000
 - `AI_CHUNK_CHARS` define o tamanho (em caracteres) de cada trecho enviado ao modelo. Mantenha-o confortavelmente abaixo do contexto (`-c`) menos `AI_MAX_TOKENS`: ~3–4 caracteres por token, e a tradução precisa de espaço para a saída. Se a saída for truncada (`finish_reason=length`), reduza-o.
 - `AI_MAX_RETRIES` limita as tentativas **por trecho** de tradução (e as tentativas HTTP do SDK).
 - Antes de qualquer processamento a CLI valida o endpoint, lista modelos (se suportado) e faz uma requisição de teste. Se falhar, nada é iniciado.
+
+### Testando se o modelo de IA está funcionando
+
+Para validar o servidor e o modelo antes de extrair cursos, rode:
+
+```bash
+make test-ai
+# ou: npm run test:ai
+# ou com Vitest: make test-ai-vitest (npm run test:ai:vitest)
+```
+
+Esse comando executa 3 verificações reais contra o seu modelo configurado no `.env`:
+1. **Conectividade e modelo:** verifica `/v1/models` e latência de resposta.
+2. **Resumo (`Summarizer`):** envia uma transcrição de exemplo em inglês e valida a geração do resumo em pt-BR.
+3. **Tradução Markdown (`MarkdownTranslator`):** envia um Markdown com títulos, links, lista, tabela e bloco de código cercado e valida se o modelo traduz integralmente mantendo intactos os blocos de código, links e estrutura.
 
 ## Autenticação
 

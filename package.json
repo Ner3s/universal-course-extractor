@@ -13,6 +13,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:ai": "tsx src/index.ts test-ai",
+    "test:ai:vitest": "vitest run --config vitest.ai.config.ts",
+    "check-config": "tsx src/index.ts check-config",
     "scrape": "tsx src/index.ts",
     "auth": "tsx src/index.ts auth"
   },
