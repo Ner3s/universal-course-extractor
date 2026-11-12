@@ -63,9 +63,9 @@ ifdef ARGS
   CLI_FLAGS += $(ARGS)
 endif
 
-.PHONY: help setup install env check-config test-ai test-ai-vitest doctor \
+.PHONY: help setup install install-hooks env check-config test-ai test-ai-vitest doctor \
         test test-watch test-integration typecheck check check-all build \
-        auth courses lessons dry-run scrape resume status logs clean clean-logs
+        auth courses lessons dry-run scrape resume inspect-lesson status logs clean clean-logs
 
 # ------------------------------------------------------------------------------
 # Ajuda
@@ -77,8 +77,9 @@ help: ## Mostra todos os comandos disponíveis e exemplos de uso
 	@echo "==========================================="
 	@echo ""
 	@echo "Setup & Ambiente:"
-	@echo "  make setup              Faz o setup completo (dependências, Chromium, .env, config e validação)"
+	@echo "  make setup              Faz o setup completo (dependências, Chromium, hooks, .env, config e validação)"
 	@echo "  make install            Instala pacotes npm e o navegador Chromium do Playwright"
+	@echo "  make install-hooks      Instala o hook Git de pre-commit (typecheck + testes unitários)"
 	@echo "  make env                Cria .env e config/platforms.yaml a partir dos exemplos (sem sobrescrever)"
 	@echo ""
 	@echo "Configuração & Diagnóstico de IA:"
@@ -105,6 +106,7 @@ help: ## Mostra todos os comandos disponíveis e exemplos de uso
 	@echo "  make resume             Retoma o processamento de aulas interrompidas ou com falha"
 	@echo ""
 	@echo "Inspeção & Manutenção:"
+	@echo "  make inspect-lesson URL=\"...\" Inspeciona seletores DOM e JWPlayer de uma aula usando cookies salvos"
 	@echo "  make status             Mostra o resumo do banco de progresso (SQLite), sessões e notas"
 	@echo "  make logs               Exibe as últimas linhas do log da aplicação (data/logs/app.log)"
 	@echo "  make clean              Remove o diretório de compilação (build/)"
@@ -141,7 +143,13 @@ install: ## Instala dependências npm e o navegador Chromium do Playwright
 	$(NPM) install
 	$(NPX) playwright install chromium
 
-setup: env install check-config ## Faz o setup completo do projeto
+install-hooks: ## Instala o hook Git de pre-commit (typecheck + testes unitários)
+	chmod +x scripts/pre-commit.sh
+	cp scripts/pre-commit.sh .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
+	@echo "[OK] Hook pre-commit instalado em .git/hooks/pre-commit"
+
+setup: env install install-hooks check-config ## Faz o setup completo do projeto
 	@echo ""
 	@echo "Setup concluído! Próximos passos:"
 	@echo "  1. Ajuste o arquivo .env com a URL e nome do seu modelo de IA"
@@ -222,6 +230,10 @@ resume: ## Retoma aulas interrompidas ou que falharam anteriormente
 # ------------------------------------------------------------------------------
 # Inspeção & Manutenção
 # ------------------------------------------------------------------------------
+
+inspect-lesson: ## Inspeciona seletores DOM e vídeo de uma aula usando cookies salvos (use URL="...")
+	@if [ -z "$(URL)" ]; then echo "Erro: informe a URL. Exemplo: make inspect-lesson URL=\"https://...\""; exit 2; fi
+	$(NODE) scripts/inspect-lesson.mjs "$(URL)"
 
 status: ## Mostra o resumo de progresso no SQLite, sessões salvas e notas geradas
 	@$(NODE) -e '\
