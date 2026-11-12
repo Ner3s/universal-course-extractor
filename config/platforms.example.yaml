@@ -1,0 +1,25 @@
+platforms:
+  skilljar:
+    enabled: true
+
+    domains:
+      - anthropic-partners.skilljar.com
+
+    selectors:
+      course_title: ""
+      lesson_links: "#curriculum-list-2 a"
+      lesson_title: ".lesson-top > h2"
+      lesson_content: "#details-pane-summary-content"
+      video: "video.jw-video"
+
+    browser:
+      headed: true
+      navigation_timeout: 30000
+
+  generic:
+    enabled: true
+    selectors:
+      lesson_title: ""
+      lesson_content: ""
+      video: "video"
+      lesson_links: ""

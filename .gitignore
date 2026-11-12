@@ -1,0 +1,10 @@
+node_modules/
+build/
+.env
+data/browser/*
+data/database/*
+data/logs/*
+data/transcripts/*
+!data/**/.gitkeep
+config/platforms.yaml
+*.log
