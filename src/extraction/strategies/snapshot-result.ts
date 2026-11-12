@@ -6,6 +6,7 @@ import {
 } from "../transcript-integrity.js";
 import {
   cuesToSegments,
+  detectTrackLanguageCode,
   pickBestTrack,
   type VideoTracksSnapshot,
 } from "../text-tracks.js";
@@ -23,7 +24,7 @@ export function snapshotToResult(
   const report = assessCoverage(segments, snapshot.duration);
   const data = {
     text: segmentsToText(segments),
-    language: track.language || undefined,
+    language: track.language || detectTrackLanguageCode(track) || undefined,
     segments,
     source,
     complete: report.complete,

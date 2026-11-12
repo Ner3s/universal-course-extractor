@@ -108,6 +108,8 @@ describe("pipeline", () => {
     expect(note).toContain("# Aula 2");
     expect(note).toContain("## Resumo da transcrição");
     expect(note).toContain("Resumo gerado.");
+    expect(note).toContain("> [!note]- Transcrição completa");
+    expect(note).toContain("> Hello there. This is the lesson.");
     expect(note).toContain("## Conteúdo da aula");
     expect(note).toContain("olá mundo");
     expect(progress.get("fake-2")).toMatchObject({ status: "completed" });
@@ -205,6 +207,25 @@ describe("pipeline", () => {
     const s = await run(build("skip"), { lessons: [lessons[0]!] });
     expect(s.skipped).toBe(1);
     expect(await readFile(join(dir, "out", "01-aula-1.md"), "utf8")).toBe("ORIGINAL");
+  });
+
+  it("processa aula somente com vídeo (sem texto escrito na página) como completed", async () => {
+    adapter.getLessonContent = async () => ({ html: "", extractedAt: new Date(), source: "video-only" });
+    const s = await run(build(), { lessons: [lessons[0]!] });
+    expect(s.completed).toBe(1);
+    const note = await readFile(join(dir, "out", "01-aula-1.md"), "utf8");
+    expect(note).toContain("Resumo gerado.");
+    expect(note).toContain("> [!note]- Transcrição completa");
+    expect(note).toContain("_Esta aula contém apenas vídeo (sem material textual adicional na página)._");
+  });
+
+  it("processa aula somente de texto (sem vídeo) como completed sem aviso de erro", async () => {
+    adapter.transcript = { status: "unavailable", reason: "No video in this lesson" };
+    const s = await run(build(), { lessons: [lessons[0]!] });
+    expect(s.completed).toBe(1);
+    const note = await readFile(join(dir, "out", "01-aula-1.md"), "utf8");
+    expect(note).toContain("_Aula somente textual (sem vídeo)._");
+    expect(note).toContain("olá mundo");
   });
 });
 

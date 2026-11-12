@@ -9,6 +9,7 @@ import { htmlToMarkdown } from "../processors/html-to-markdown.js";
 import { composeMarkdown } from "../processors/markdown-composer.js";
 import type { CoursePlatformAdapter } from "../platforms/contracts/course-platform-adapter.js";
 import type { TranscriptStore } from "../extraction/transcript-store.js";
+import { NO_VIDEO_REASON } from "../extraction/strategies/speech-recognition.strategy.js";
 import type { MarkdownWriter } from "../storage/writers/markdown-writer.js";
 import {
   detectCompletedStages,
@@ -52,6 +53,7 @@ export type LessonOutcome =
   | { status: "failed"; error: string; stage: StepName };
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+const VIDEO_ONLY_HASH = "video-only";
 
 /** Processa uma aula retomando de onde parou (etapas já persistidas não são refeitas). */
 export class LessonProcessor {
@@ -80,6 +82,7 @@ export class LessonProcessor {
 
     try {
       const done = () => detectCompletedStages(progress.get(lesson.id));
+      const isVideoOnly = () => progress.get(lesson.id)?.contentHash === VIDEO_ONLY_HASH;
 
       // 1. Transcrição
       if (!done().transcript) {
@@ -103,6 +106,14 @@ export class LessonProcessor {
             this.emit(lesson, "transcript", "done", t.source);
           }
           logger.info({ lesson: lesson.id, source: t.source, complete: t.complete }, "Transcript extracted");
+        } else if (t.status === "unavailable" && t.reason === NO_VIDEO_REASON) {
+          progress.saveStage(lesson.id, {
+            transcriptStatus: "unavailable",
+            transcriptComplete: true,
+            transcriptWarnings: [NO_VIDEO_REASON],
+          });
+          this.emit(lesson, "transcript", "done", "no video");
+          logger.info({ lesson: lesson.id }, "Lesson has no video; proceeding as text-only lesson");
         } else {
           const reason = t.status === "failed" ? t.error : t.reason;
           progress.saveStage(lesson.id, { transcriptStatus: t.status, transcriptWarnings: [reason] });
@@ -117,19 +128,34 @@ export class LessonProcessor {
       // 2. Conteúdo HTML → Markdown
       stage = "content";
       let title = lesson.title;
-      if (!done().content) {
+      if (!done().content && !isVideoOnly()) {
         this.emit(lesson, "content", "start");
         progress.setStatus(lesson.id, "extracting");
         const content = await this.d.adapter.getLessonContent(lesson);
-        const converted = htmlToMarkdown(content.html);
-        if (!converted.markdown.trim()) throw new Error("Lesson content is empty after conversion");
-        warnings.push(...converted.warnings);
-        progress.saveStage(lesson.id, {
-          contentHash: sha256(content.html),
-          contentMarkdown: converted.markdown,
-        });
-        progress.setStatus(lesson.id, "content_extracted");
-        this.emit(lesson, "content", "done");
+        const converted = content.html.trim() ? htmlToMarkdown(content.html) : { markdown: "", warnings: [] };
+        if (!converted.markdown.trim()) {
+          const hasTranscript = Boolean(progress.get(lesson.id)?.transcriptPath);
+          if (content.source === "video-only" || hasTranscript) {
+            progress.saveStage(lesson.id, {
+              contentHash: VIDEO_ONLY_HASH,
+              contentMarkdown: "",
+              translation: "",
+            });
+            progress.setStatus(lesson.id, "content_extracted");
+            this.emit(lesson, "content", "done", "video-only");
+            logger.info({ lesson: lesson.id }, "Video-only lesson: no written text content to convert");
+          } else {
+            throw new Error("Lesson content is empty after conversion");
+          }
+        } else {
+          warnings.push(...converted.warnings);
+          progress.saveStage(lesson.id, {
+            contentHash: sha256(content.html),
+            contentMarkdown: converted.markdown,
+          });
+          progress.setStatus(lesson.id, "content_extracted");
+          this.emit(lesson, "content", "done");
+        }
       } else {
         this.emit(lesson, "content", "reused");
       }
@@ -139,11 +165,15 @@ export class LessonProcessor {
       // 3. Resumo (somente a transcrição; nunca o conteúdo traduzido)
       stage = "summary";
       let record = progress.get(lesson.id)!;
-      if (!record.summary && record.transcriptPath) {
+      let cleanedTranscript: string | undefined;
+      if (record.transcriptPath && existsSync(record.transcriptPath)) {
+        const raw = await readFile(record.transcriptPath, "utf8");
+        cleanedTranscript = cleanTranscript(raw);
+      }
+      if (!record.summary && cleanedTranscript) {
         this.emit(lesson, "summary", "start");
         progress.setStatus(lesson.id, "summarizing");
-        const raw = await readFile(record.transcriptPath, "utf8");
-        const summary = await this.d.summarizer.summarize(cleanTranscript(raw));
+        const summary = await this.d.summarizer.summarize(cleanedTranscript);
         progress.saveStage(lesson.id, { summary });
         this.emit(lesson, "summary", "done");
       } else if (record.summary) {
@@ -153,7 +183,9 @@ export class LessonProcessor {
       // 4. Tradução integral (entrada: Markdown do conteúdo; independente do resumo)
       stage = "translation";
       record = progress.get(lesson.id)!;
-      if (!record.translation) {
+      if (isVideoOnly()) {
+        this.emit(lesson, "translation", "done", "0 chunk(s)");
+      } else if (!record.translation) {
         this.emit(lesson, "translation", "start");
         progress.setStatus(lesson.id, "translating");
         const tr = await this.d.translator.translate(record.contentMarkdown!);
@@ -167,6 +199,11 @@ export class LessonProcessor {
       stage = "write";
       record = progress.get(lesson.id)!;
       const transcriptKnown = record.transcriptPath !== undefined;
+      const noVideo =
+        !transcriptKnown &&
+        record.transcriptStatus === "unavailable" &&
+        Boolean(record.transcriptWarnings?.includes(NO_VIDEO_REASON));
+
       const note = composeMarkdown({
         title,
         platform: lesson.platform,
@@ -175,6 +212,7 @@ export class LessonProcessor {
         position: lesson.position,
         sourceUrl: lesson.url,
         summary: record.summary,
+        transcriptText: cleanedTranscript,
         transcript: {
           status: transcriptKnown
             ? record.transcriptComplete
@@ -182,10 +220,11 @@ export class LessonProcessor {
               : "partial"
             : ((record.transcriptStatus as "unavailable" | "failed" | "needs-speech-recognition" | undefined) ?? "unavailable"),
           source: record.transcriptSource,
-          complete: record.transcriptComplete ?? false,
-          warnings: record.transcriptWarnings,
+          complete: noVideo ? true : (record.transcriptComplete ?? false),
+          warnings: noVideo ? undefined : record.transcriptWarnings,
+          noVideo,
         },
-        translatedContent: record.translation!,
+        translatedContent: record.translation ?? "",
       });
       const w = await this.d.writer.write({
         dir: job.outputDir,
@@ -197,7 +236,7 @@ export class LessonProcessor {
         this.emit(lesson, "write", "warn", "file exists; skipped");
         return { status: "skipped", path: w.path };
       }
-      const complete = transcriptKnown && record.transcriptComplete === true;
+      const complete = (transcriptKnown && record.transcriptComplete === true) || (noVideo && !isVideoOnly());
       const finalStatus = complete ? "completed" : "partial";
       progress.markFinished(lesson.id, finalStatus, w.path);
       this.emit(lesson, "write", "done", w.path);

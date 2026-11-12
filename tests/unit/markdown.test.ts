@@ -102,6 +102,24 @@ describe("composeMarkdown", () => {
     expect(partial).toContain("possivelmente incompleta");
     expect(partial).toContain("gap");
   });
+  it("inclui bloco recolhível '> [!note]- Transcrição completa' quando transcriptText está presente", () => {
+    const md = composeMarkdown({
+      ...base,
+      transcriptText: "Primeiro parágrafo da aula.\n\nSegundo parágrafo da aula.",
+    });
+    expect(md).toContain("> [!note]- Transcrição completa\n> Primeiro parágrafo da aula.\n>\n> Segundo parágrafo da aula.");
+  });
+  it("formata adequadamente aulas só com vídeo e aulas só de texto", () => {
+    const videoOnly = composeMarkdown({ ...base, translatedContent: "" });
+    expect(videoOnly).toContain("_Esta aula contém apenas vídeo (sem material textual adicional na página)._");
+    const textOnly = composeMarkdown({
+      ...base,
+      summary: undefined,
+      transcript: { status: "unavailable", complete: true, noVideo: true },
+    });
+    expect(textOnly).toContain("_Aula somente textual (sem vídeo)._");
+    expect(textOnly).not.toContain("Resumo indisponível");
+  });
   it("lê lesson_id do frontmatter", () => {
     expect(readLessonIdFromMarkdown(composeMarkdown(base))).toBe("h/c/l1");
     expect(readLessonIdFromMarkdown("no frontmatter")).toBeUndefined();

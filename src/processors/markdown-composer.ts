@@ -10,7 +10,14 @@ export interface ComposeInput {
   sourceUrl: string;
   /** Resumo em Markdown (ou undefined se não houver transcrição utilizável). */
   summary?: string;
-  transcript: Pick<TranscriptResult, "status"> & { source?: string; complete?: boolean; warnings?: string[] };
+  /** Transcrição completa limpa para exibir em bloco recolhível do Obsidian. */
+  transcriptText?: string;
+  transcript: Pick<TranscriptResult, "status"> & {
+    source?: string;
+    complete?: boolean;
+    warnings?: string[];
+    noVideo?: boolean;
+  };
   /** Conteúdo traduzido (Markdown). */
   translatedContent: string;
   generatedAt?: Date;
@@ -36,23 +43,44 @@ export function demoteHeadings(markdown: string, by: number): string {
     .join("\n");
 }
 
+/** Formata a transcrição completa em um callout recolhível do Obsidian (`> [!note]- Transcrição completa`). */
+export function formatCollapsibleTranscript(text: string): string {
+  const lines = text
+    .trim()
+    .split("\n")
+    .map((line) => (line.trim().length > 0 ? `> ${line}` : ">"));
+  return ["> [!note]- Transcrição completa", ...lines].join("\n");
+}
+
 function summarySection(input: ComposeInput): string {
   const t = input.transcript;
   const notes: string[] = [];
   if (!input.summary) {
+    if (t.noVideo) {
+      return "_Aula somente textual (sem vídeo)._";
+    }
     const why =
       t.status === "unavailable"
         ? "Nenhuma transcrição ou legenda acessível foi encontrada para esta aula."
         : t.status === "needs-speech-recognition"
           ? "Não há transcrição acessível; seria necessário reconhecimento de fala (não implementado)."
           : "A extração da transcrição falhou.";
-    return `> [!warning] Resumo indisponível\n> ${why}`;
+    notes.push(`> [!warning] Resumo indisponível\n> ${why}`);
+  } else {
+    if (t.status === "partial" || t.complete === false) {
+      const details = t.warnings?.length ? ` Motivos: ${t.warnings.join("; ")}.` : "";
+      notes.push(
+        `> [!warning] Transcrição possivelmente incompleta\n> O resumo foi gerado a partir de uma transcrição que não pôde ser verificada como completa.${details}`,
+      );
+    }
+    notes.push(input.summary.trim());
   }
-  if (t.status === "partial" || t.complete === false) {
-    const details = t.warnings?.length ? ` Motivos: ${t.warnings.join("; ")}.` : "";
-    notes.push(`> [!warning] Transcrição possivelmente incompleta\n> O resumo foi gerado a partir de uma transcrição que não pôde ser verificada como completa.${details}`);
+
+  if (input.transcriptText?.trim()) {
+    notes.push(formatCollapsibleTranscript(input.transcriptText));
   }
-  return [...notes, input.summary.trim()].join("\n\n");
+
+  return notes.join("\n\n");
 }
 
 /** Monta o arquivo final no formato do §13.1 com frontmatter YAML. */
@@ -72,16 +100,22 @@ export function composeMarkdown(input: ComposeInput): string {
     tags: ["curso", input.platform],
   }).trimEnd();
 
-  const content = demoteHeadings(input.translatedContent.trim(), 2);
-  return [
-    `---\n${front}\n---`,
-    `# ${input.title}`,
-    `## Resumo da transcrição`,
-    summarySection(input),
-    `---`,
-    `## Conteúdo da aula`,
-    content,
-  ].join("\n\n") + "\n";
+  const rawContent = input.translatedContent.trim();
+  const content = rawContent
+    ? demoteHeadings(rawContent, 2)
+    : "_Esta aula contém apenas vídeo (sem material textual adicional na página)._";
+
+  return (
+    [
+      `---\n${front}\n---`,
+      `# ${input.title}`,
+      `## Resumo da transcrição`,
+      summarySection(input),
+      `---`,
+      `## Conteúdo da aula`,
+      content,
+    ].join("\n\n") + "\n"
+  );
 }
 
 /** Extrai o lesson_id do frontmatter de um arquivo existente (identidade da aula). */

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Logger } from "pino";
 import type { AiProvider } from "../ai/ai-provider.interface.js";
 import { CliUsageError } from "../cli/errors.js";
@@ -149,7 +149,10 @@ export class Orchestrator {
             id: r.id, platform: r.platform, courseId: r.courseId, title: r.title, url: r.url, position: r.position,
           }));
           const all = this.d.progress.listByCourse(courseId);
-          const outputDir = o.output ?? resolveOutputDir(courseRec.title, undefined, this.d.config.outputDir);
+          const recordedPath = all.find((r) => r.outputPath)?.outputPath;
+          const outputDir =
+            o.output ??
+            (recordedPath ? dirname(recordedPath) : resolveOutputDir(courseRec.title, undefined, this.d.config.outputDir));
           return this.run({
             adapter,
             course: courseRec,

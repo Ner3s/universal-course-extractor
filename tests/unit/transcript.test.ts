@@ -7,10 +7,13 @@ import {
 } from "../../src/extraction/transcript-integrity.js";
 import {
   cuesToSegments,
+  detectTrackLanguageCode,
+  parseCaptionFile,
   pickBestTrack,
   stripCueMarkup,
 } from "../../src/extraction/text-tracks.js";
 import { snapshotToResult } from "../../src/extraction/strategies/snapshot-result.js";
+import { PlayerCaptionStrategy } from "../../src/extraction/strategies/player-caption.strategy.js";
 import { TranscriptExtractor } from "../../src/extraction/transcript-extractor.js";
 import type { TranscriptStrategy } from "../../src/extraction/strategy.js";
 import type { TranscriptResult } from "../../src/types/index.js";
@@ -62,6 +65,94 @@ describe("text tracks", () => {
     expect(pickBestTrack([a, b])?.label).toBe("b");
     expect(cuesToSegments(b.cues)).toHaveLength(2);
     expect(pickBestTrack([{ ...a, cues: [] }])).toBeUndefined();
+  });
+  it("prioriza Português (pt/Portuguese) sobre Inglês quando ambas as faixas são completas", () => {
+    const en = {
+      kind: "captions",
+      label: "English",
+      language: "",
+      mode: "hidden",
+      cues: [
+        { start: 0, end: 5, text: "Hello" },
+        { start: 5, end: 10, text: "World" },
+        { start: 10, end: 15, text: "End" },
+      ],
+    };
+    const pt = {
+      kind: "captions",
+      label: "Portuguese",
+      language: "",
+      mode: "hidden",
+      cues: [
+        { start: 0, end: 7, text: "Olá mundo" },
+        { start: 7, end: 15, text: "Fim" },
+      ],
+    };
+    const es = {
+      kind: "captions",
+      label: "Spanish",
+      language: "es",
+      mode: "hidden",
+      cues: en.cues,
+    };
+    expect(detectTrackLanguageCode(pt)).toBe("pt");
+    expect(detectTrackLanguageCode(en)).toBe("en");
+    expect(pickBestTrack([en, pt, es])?.label).toBe("Portuguese");
+    expect(pickBestTrack([es, en])?.label).toBe("English");
+  });
+  it("faz parse de arquivos SRT e WebVTT", () => {
+    const srt = [
+      "1",
+      "00:00:00,031 --> 00:00:02,875",
+      "Neste módulo, vamos examinar",
+      "como acessamos o Claude.",
+      "",
+      "2",
+      "00:00:03,015 --> 00:00:05,578",
+      "Segundo bloco.",
+    ].join("\r\n");
+    const cues = parseCaptionFile(srt);
+    expect(cues).toEqual([
+      { start: 0.031, end: 2.875, text: "Neste módulo, vamos examinar como acessamos o Claude." },
+      { start: 3.015, end: 5.578, text: "Segundo bloco." },
+    ]);
+  });
+  it("extrai legendas em Português via PlayerCaptionStrategy (manifesto JWPlayer)", async () => {
+    const srt = "1\n00:00:00,000 --> 00:00:50,000\nParte um.\n\n2\n00:00:50,000 --> 00:01:00,000\nParte dois.\n";
+    const fakePage = {
+      evaluate: async (_fn: unknown, arg?: unknown) => {
+        if (typeof arg === "string") {
+          if (arg.endsWith(".srt")) return srt;
+          return JSON.stringify({
+            playlist: [
+              {
+                duration: 60,
+                tracks: [
+                  { file: "https://cdn.jwplayer.com/tracks/en.srt", kind: "captions", label: "English" },
+                  { file: "https://cdn.jwplayer.com/tracks/pt.srt", kind: "captions", label: "Portuguese" },
+                ],
+              },
+            ],
+          });
+        }
+        return { mediaUrl: "https://cdn.jwplayer.com/v2/media/Ju43Csrd" };
+      },
+    };
+    const strat = new PlayerCaptionStrategy();
+    const res = await strat.extract({
+      page: fakePage as never,
+      logger: pino({ level: "silent" }),
+      selectors: {},
+    });
+    expect(res).toMatchObject({
+      status: "found",
+      source: "captions",
+      complete: true,
+      language: "pt",
+    });
+    if (res?.status === "found") {
+      expect(res.text).toContain("Parte um.");
+    }
   });
   it("snapshotToResult retorna found/partial conforme cobertura", () => {
     const track = (end: number) => ({
